@@ -64,7 +64,7 @@ cte_kardex AS (
     SELECT
         pa.id,
         pa.nro_cuota,
-        pa.fecha_pago          AS fecha_limite_pago,
+        pa.fecha_pago AS fecha_limite_pago,
         pa.concepto_pago_id,
         pa.inscripcion_id,
         pa.plan_pago,
@@ -154,7 +154,8 @@ cte_promociones AS (
    ══════════════════════════════════════════════════════════════════════════ */
 SELECT
     /* ── § 1 · DATOS DEL PROGRAMA ─────────────────────────────────────── */
-    IFNULL(pu.codigo, 'sin definir') AS Cod_Academico,
+    IFNULL(pu.programa_unico_id,"SIN ASIGNAR") AS Cod_Unico,
+	IFNULL(pu.codigo, 'sin definir') AS Cod_Academico,
     CASE
         WHEN c.nombre = 'Diplomado'    THEN CONCAT_WS('-', 'D', p.id)
         WHEN c.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
@@ -223,32 +224,13 @@ SELECT
     END, 'sin definir') AS Concepto_Ultimo_Pago,
     IFNULL(tram.monto_tram_personal, 0) AS Tram_Personal,
     /* ── § 4 · ESTADOS ───────────────────────────────────────────────── */
-    CASE i.estado_administrativo_id
-        WHEN 1 THEN 'Prospecto'
-        WHEN 2 THEN 'Preinscrito'
-        WHEN 3 THEN 'Inscrito'
-        WHEN 4 THEN 'Inscrito Transferido'
-        WHEN 5 THEN 'Retirado'
-        WHEN 6 THEN 'Retirado Cambiado'
-        WHEN 7 THEN 'Observado'
-        ELSE 'Otro'
-    END AS Estado_Administrativo,
-    /*CASE
-        WHEN i.estado_administrativo_id = 1
-             OR SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.pagado,0) ELSE 0 END) = 0
-             THEN 'Prospecto'
-        WHEN i.estado_administrativo_id = 2
-             OR (SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.pagado,0) ELSE 0 END) > 0
-                 AND SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.pagado,0) ELSE 0 END) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END))
-             THEN 'Preinscrito'
-        ELSE IFNULL(ea.nombre, 'sin definir')
-    END AS Estado_Academico,*/
+    IFNULL(ea3.nombre,'sin definir') AS Estado_Administrativo,
     IFNULL(ea.nombre, 'sin definir') AS Estado_Academico,
     ei.nombre AS Estado_Esam,
     /* Estado Esam Real: combina estado de inscripción con monto formativo pagado */
     CASE
         WHEN ei.id IN (0,1,2,3,4,5)
-             AND SUM(kardex.total_formativo_cuota) = 0 THEN 'Prospecto'
+             AND SUM(kardex.total_formativo_cuota) <= 100 THEN 'Prospecto'
         WHEN ei.nombre = 'Retirado'
              AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Retirado Preinscrito'
         WHEN ei.nombre = 'Retirado'
@@ -287,12 +269,13 @@ FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
 INNER JOIN categorias c ON c.id = p2.idcategoria
+INNER JOIN estados_inscripcion ei ON ei.id = i.estado_ins
 LEFT JOIN estados_academicos ea ON ea.id = i.estado_academico_id
 LEFT JOIN estados_academicos ea2 ON ea2.id = ea.estado_academico_padre_id
-INNER JOIN productionadminesamdb.personas p3 ON p3.id = i.idestudiante
+LEFT JOIN estados_administrativos ea3 ON ea3.id = i.estado_administrativo_id
 LEFT JOIN programa_universidad pu ON pu.id = p.programa_universidad_id
+INNER JOIN productionadminesamdb.personas p3 ON p3.id = i.idestudiante
 INNER JOIN productionadminesamdb.sedes s ON s.id = p.idsede
-INNER JOIN estados_inscripcion ei ON ei.id = i.estado_ins
 INNER JOIN productionadminesamdb.instituciones i2 ON i2.id = p.iduniversidad
 /* Kardex consolidado desde CTEs */
 LEFT JOIN cte_kardex kardex ON kardex.inscripcion_id = i.id
