@@ -6,8 +6,8 @@ SELECT
       WHEN cat.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
       WHEN cat.nombre = 'Maestría'     THEN CONCAT_WS('-', 'M', p.id)
   END AS Id_Esam,
-  i.id AS id,
-  ipu.id AS inscripcionProgramaUniversidadId,
+  i.id AS id_inscripcion_potal,
+  ipu.id AS id_inscripcion_universidad,
   p.num_doc AS ci,
   CONCAT_WS(' ', p.nombres, p.pri_apellido, p.seg_apellido) AS Nombre,
   prog.gestion,
