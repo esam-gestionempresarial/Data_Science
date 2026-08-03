@@ -25,10 +25,10 @@ cte_plan_actualizado AS (
         pcp.id   AS plan_pago_id,
         pcp.nombre AS plan_pago,
         p.fecha_fin,
-        SUM(IF(m.tipo_descuento_id = 2, ppd.monto, 0)) AS monto_descuento,
         SUM(IF(m.tipo_descuento_id = 1, ppd.monto, 0)) AS monto_regularizado,
-        SUM(IF(m.tipo_descuento_id = 4, ppd.monto, 0)) AS monto_compensacion,
+        SUM(IF(m.tipo_descuento_id = 2, ppd.monto, 0)) AS monto_descuento,
         SUM(IF(m.tipo_descuento_id = 3, ppd.monto, 0)) AS monto_liquidado,
+        SUM(IF(m.tipo_descuento_id = 4, ppd.monto, 0)) AS monto_compensacion,
         SUM(IFNULL(ppd.monto, 0)) AS descuento_total
     FROM plan_pagos pp
     JOIN  inscripciones i ON i.id = pp.inscripcion_id
@@ -50,9 +50,9 @@ cte_plan_actualizado AS (
 cte_pcpes AS (
     SELECT
         pcp.id,
-        SUM(IF(cp.concepto_pago_id = 1, cp.monto, 0)) AS pc_monto_matricula,
-        SUM(IF(cp.concepto_pago_id = 2, cp.monto, 0)) AS pv_monto_colegiatura,
-        SUM(IF(cp.concepto_pago_id = 3, cp.monto, 0)) AS pc_monto_titulacion
+        SUM(IF(cp.concepto_pago_id = 1, cp.monto, 0)) AS precio_matricula,
+        SUM(IF(cp.concepto_pago_id = 2, cp.monto, 0)) AS precio_colegiatura,
+        SUM(IF(cp.concepto_pago_id = 3, cp.monto, 0)) AS precio_titulacion
     FROM plan_cobros_programa pcp
     JOIN cobros_programa cp ON cp.plan_cobro_programa_id = pcp.id
     GROUP BY pcp.id
@@ -73,9 +73,9 @@ cte_kardex AS (
         pa.monto_regularizado,
         pa.monto_compensacion,
         pa.monto_liquidado,
-        pc.pc_monto_matricula,
-        pc.pv_monto_colegiatura,
-        pc.pc_monto_titulacion,
+        pc.precio_matricula,
+        pc.precio_colegiatura,
+        pc.precio_titulacion,
         /* Pagos efectivos de la cuota */
         SUM(IFNULL(dpi.monto, 0)) AS pagado,
         /* Saldo = monto – descuento – pagado */
@@ -175,9 +175,9 @@ SELECT
     /* ── § 3 · KARDEX / HISTORIAL DE PAGOS ───────────────────────────── */
     IFNULL(kardex.plan_pago, '-') AS Plan_Pago,
     IF(MAX(kardex.es_contado) = 1, 'Contado', 'Crédito') AS Tipo_Plan_Pago,
-    IFNULL(kardex.pc_monto_matricula, 0) AS PC_Monto_Matricula,
-    IFNULL(kardex.pv_monto_colegiatura, 0) AS PV_Monto_Colegiatura,
-    IFNULL(kardex.pc_monto_titulacion, 0) AS PC_Monto_Titulacion,
+    IFNULL(kardex.precio_matricula, 0) AS Precio_Matricula,
+    IFNULL(kardex.precio_colegiatura, 0) AS Precio_Colegiatura,
+    IFNULL(kardex.precio_titulacion, 0) AS Precio_Titulacion,
     IFNULL(prom.descripcion, '-') AS Desc_Promocion,
     /* Matrícula */
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 1 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Matricula,
@@ -255,16 +255,25 @@ SELECT
         WHEN SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
         ELSE IFNULL(ei.nombre, 'sin definir')
     END AS Estado_Sistema,
-    /* Estado Cartera: basado en cuotas vencidas vs saldo */
+    /* Estado Cartera: 7 niveles según reglas de negocio v2 basadas en pagos y fechas de vencimiento
+       01·Sin cartera asignada → sin plan de pagos registrado (kardex NULL)
+       02·Vigente              → cuotas pendientes pero todas dentro de plazo
+       03·Exento de deuda      → todas las cuotas saldadas, inscripción activa
+       04·Retrasado            → 1 o 2 cuotas vencidas
+       05·En mora              → ≥3 cuotas vencidas y programa aún en curso
+       06·Riesgo de incobr.    → ≥3 cuotas vencidas y programa ya finalizado
+       07·Liquidado            → todas saldadas e inscripción cancelada (estado_ins = 2) */
     CASE
-        WHEN SUM(kardex.es_cuota_vencida) = 0 AND SUM(kardex.es_cuota_con_saldo) > 0 THEN 'Vigente'
+        WHEN kardex.inscripcion_id IS NULL THEN 'Sin cartera asignada'
+        WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins  = 2 THEN 'Liquidado'
         WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins != 2 THEN 'Exento de deuda'
-        WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins = 2 THEN 'Liquidado'
+        WHEN SUM(kardex.es_cuota_vencida) = 0 AND SUM(kardex.es_cuota_con_saldo) > 0 THEN 'Vigente'
         WHEN SUM(kardex.es_cuota_vencida) BETWEEN 1 AND 2 THEN 'Retrasado'
-        WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
         WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin  > CURDATE() THEN 'En mora'
+        WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
         ELSE 'Sin cartera asignada'
-    END AS Estado_Cartera
+    END AS Estado_Cartera,
+    i.created_at AS Fecha_ceacion
 FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
