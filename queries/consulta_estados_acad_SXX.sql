@@ -38,9 +38,9 @@ SELECT
   END AS estadoAcademicoPortal,
   -- ── Estado Académico DNA (solo rama notas_importadas = 1) ──
   CASE
-    WHEN pu.notas_importadas <> 1                      THEN 'Pendiente (notas no importadas)'
-    WHEN COALESCE(mods.total, 0) = 0                   THEN '-'
-    WHEN COALESCE(prg.programados, 0) < mods.total     THEN '-'   -- faltan módulos por programar
+    WHEN pu.notas_importadas <> 1 THEN 'Pendiente (notas no importadas)'
+    WHEN COALESCE(mods.total, 0) = 0 THEN '-'
+    WHEN COALESCE(prg.programados, 0) < mods.total THEN '-'   -- faltan módulos por programar
     WHEN COALESCE(prg.reprobadas, 0) > 0 THEN 'Abandono académico'
     ELSE 'Concluido'
   END AS estadoAcademicoDNA
