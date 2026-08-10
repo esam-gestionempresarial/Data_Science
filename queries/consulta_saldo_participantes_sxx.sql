@@ -1,5 +1,10 @@
 select
 	pu.codigo as cod_academico,
+	IFNULL(CASE
+		WHEN cu.nombre = 'Diplomado' THEN CONCAT_WS('-', 'D', i.idprograma)
+        WHEN cu.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', i.idprograma)
+        WHEN cu.nombre = 'Maestría' THEN CONCAT_WS('-', 'M', i.idprograma)
+    END, "-") AS id_portal,
 	cu.nombre as tipo_programa,
 	ipu.id as id_ins_sxx,
 	IFNULL(i.id, "-") as id_ins_portal,
@@ -28,10 +33,10 @@ from inscripcion_programa_universidad ipu
 left join programa_universidad pu on ipu.programa_universidad_id = pu.id
 inner join categorias_universidades cu on cu.id = pu.categoria_universidad_id
 left join sede_universidad su on pu.sede_universidad_id = su.id
-right join plan_pagos_universidad_estudiantes ppue on ppue.inscripcion_programa_universidad_id = ipu.id
-right join pagos_universidad_estudiantes pue on pue.plan_pagos_universidad_estudiantes_id = ppue.id
-right join plan_pagos_concepto_universidad ppcu on ppcu.id = ppue.plan_pagos_concepto_universidad_id
-left join inscripciones i on i.id = ipu.inscripcion_id
-left join productionadminesamdb.personas p on p.id = i.idestudiante 
+left join plan_pagos_universidad_estudiantes ppue on ipu.id = ppue.inscripcion_programa_universidad_id
+left join pagos_universidad_estudiantes pue on pue.plan_pagos_universidad_estudiantes_id = ppue.id 
+left join plan_pagos_concepto_universidad ppcu on ppcu.id = ppue.plan_pagos_concepto_universidad_id
+left join inscripciones i on ipu.inscripcion_id = i.id
+left join productionadminesamdb.personas p on i.idestudiante = p.id 
 where su.universidad_id = 9 #and ppue.cite_codigo like '%/06/2026'
 GROUP BY ipu.id, i.id ORDER BY i.id DESC
