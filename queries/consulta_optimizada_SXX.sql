@@ -225,8 +225,14 @@ SELECT
     IFNULL(tram.monto_tram_personal, 0) AS Tram_Personal,
     /* ── § 4 · ESTADOS ───────────────────────────────────────────────── */
     IFNULL(ea3.nombre,'sin definir') AS Estado_Administrativo,
-    IFNULL(ea.nombre, 'sin definir') AS Estado_Academico,
-    ei.nombre AS Estado_Esam,
+    IFNULL(ea.nombre, 'sin definir') AS Estado_Academico_Portal,
+    CASE
+        WHEN pu.notas_importadas <> 1 THEN 'Pendiente (notas no importadas)'
+        WHEN COALESCE(mods.total, 0) = 0 THEN '-'
+        WHEN COALESCE(prg.programados, 0) < mods.total THEN '-'   -- faltan módulos por programar
+        WHEN COALESCE(prg.reprobadas, 0) > 0 THEN 'Abandono académico'
+    ELSE 'Concluido' END AS Estado_Academico_Sistema,
+    ei.nombre AS Estado_Portal,
     /* Estado Esam Real: combina estado de inscripción con monto formativo pagado */
     CASE
         WHEN ei.id IN (0,1,2,3,4,5)
@@ -294,6 +300,23 @@ LEFT JOIN detalle_pagos_inscripcion det_pag ON det_pag.id = kardex.id_dpi_max
 LEFT JOIN cte_promociones prom ON prom.id = i.promocion_id
 /* Trámites personales ya agregados por inscripción */
 LEFT JOIN cte_tram_personal tram ON tram.inscripcion_id = i.id
+/* total de módulos del programa universidad (módulos requeridos) */
+LEFT JOIN (
+  SELECT programa_universidad_id, COUNT(*) AS total
+  FROM modulo_programa_universidad
+  WHERE eliminado_en IS NULL
+  GROUP BY programa_universidad_id
+) mods ON mods.programa_universidad_id = pu.id
+/* programaciones del estudiante + cuántas reprobadas/sin nota */
+LEFT JOIN (
+  SELECT
+    inscripcion_programa_universidad_id,
+    COUNT(*) AS programados,
+    SUM(CASE WHEN nota_final IS NULL OR nota_final < 71 THEN 1 ELSE 0 END) AS reprobadas
+  FROM programacion_modulo_universidad
+  WHERE eliminado_en IS NULL
+  GROUP BY inscripcion_programa_universidad_id
+) prg ON prg.inscripcion_programa_universidad_id = ipu.id
 WHERE ei.id IN (0, 1, 2, 3, 4, 5)
   AND c.nombre IN ('Diplomado', 'Especialidad', 'Maestría')
   AND s.id IN (1,2,3,4,5,6,7,8,14,15,16,18,20,22,23,24,25,26,37,50,52,80,125,127,128,129)
