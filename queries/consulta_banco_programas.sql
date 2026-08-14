@@ -1,11 +1,12 @@
 SELECT
     IFNULL(pu.programa_unico_id,"SIN ASIGNAR") AS cod_unico,
     IFNULL(pu.codigo, "SIN ASIGNAR") AS cod_academico,
+    IFNULL(p.codigo, "SIN ASIGNAR") AS cod_contable,
     CASE
         WHEN c.nombre = 'Diplomado'   THEN CONCAT_WS('-', 'D', p.id)
         WHEN c.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
         WHEN c.nombre = 'Maestría'    THEN CONCAT_WS('-', 'M', p.id)
-    END AS Id_Portal,
+    END AS id_portal,
     s.nombre AS sede,
     c.nombre AS tipo,
     i2.abreviatura AS convenio,
@@ -45,5 +46,5 @@ LEFT JOIN (
     WHERE rnk = 1
 ) ult_mod ON ult_mod.idprograma = p.id
 WHERE c.nombre REGEXP '^(Dip|Maes|Esp|Curso|Carrera|licenciatura|Téc)'
-GROUP BY i2.abreviatura, s.nombre, c.nombre, pu.codigo, Id_Portal, p.nombre_compuesto, ep.parent_id, ep.nombre, p.estado_programa_id, p.fecha_inicio, p.fecha_fin, ult_mod.numero
+GROUP BY i2.abreviatura, s.nombre, c.nombre, pu.codigo, p.codigo, Id_Portal, p.nombre_compuesto, ep.parent_id, ep.nombre, p.estado_programa_id, p.fecha_inicio, p.fecha_fin, ult_mod.numero
 ORDER BY pu.programa_unico_id ASC
