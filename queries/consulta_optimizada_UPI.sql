@@ -57,7 +57,9 @@ cte_pcpes AS (
         SUM(IF(cp.concepto_pago_id = 375, cp.monto, 0)) AS pc_monto_deuda_anterior,
         SUM(IF(cp.concepto_pago_id = 383, cp.monto, 0)) AS pc_monto_opcion_grado,
         SUM(IF(cp.concepto_pago_id = 388, cp.monto, 0)) AS pc_monto_recuperacion_asignatura,
-        SUM(IF(cp.concepto_pago_id = 389, cp.monto, 0)) AS pc_monto_adicion_asignatura
+        SUM(IF(cp.concepto_pago_id = 389, cp.monto, 0)) AS pc_monto_adicion_asignatura,
+        SUM(IF(cp.concepto_pago_id = 313, cp.monto, 0)) AS pc_monto_diploma,
+        SUM(IF(cp.concepto_pago_id = 278, cp.monto, 0)) AS pc_monto_certificacion
     FROM plan_cobros_programa pcp
     JOIN cobros_programa cp ON cp.plan_cobro_programa_id = pcp.id
     GROUP BY pcp.id
@@ -92,13 +94,34 @@ cte_kardex AS (
         (pa.monto - pa.descuento_total - SUM(IFNULL(dpi.monto, 0))) AS saldo,
         /* Flags de plan */
         IF(UPPER(pa.plan_pago) LIKE '%CONTADO%', 1, 0) AS es_contado,
-        /* Total formativo: pagos + regularizado + compensación (solo conceptos 1, 2, 312, 314, 375, 383, 388, 389) */
-        CASE WHEN pa.concepto_pago_id IN (1, 2, 312, 314, 375, 383, 388, 389)
+        /* Total formativo: pagos + regularizado + compensación (1, 2, 312, 389) */
+        CASE WHEN pa.concepto_pago_id IN (1, 2, 312, 389)
              THEN IFNULL(SUM(IFNULL(dpi.monto, 0)), 0)
                   + IFNULL(pa.monto_regularizado, 0)
                   + IFNULL(pa.monto_compensacion, 0)
              ELSE 0
         END AS total_formativo_cuota,
+        /* Total opcion de grado: pagos + regularizado + compensación (375, 383) */
+        CASE WHEN pa.concepto_pago_id IN (375, 383)
+             THEN IFNULL(SUM(IFNULL(dpi.monto, 0)), 0)
+                  + IFNULL(pa.monto_regularizado, 0)
+                  + IFNULL(pa.monto_compensacion, 0)
+             ELSE 0
+        END AS total_opcion_grado,
+        /* Total otros conceptos: pagos + regularizado + compensación (314, 388) */
+        CASE WHEN pa.concepto_pago_id IN (314, 388)
+             THEN IFNULL(SUM(IFNULL(dpi.monto, 0)), 0)
+                  + IFNULL(pa.monto_regularizado, 0)
+                  + IFNULL(pa.monto_compensacion, 0)
+             ELSE 0
+        END AS total_otros_conceptos,
+        /* Total diploma: pagos + regularizado + compensación (313, 278) */
+        CASE WHEN pa.concepto_pago_id IN (313, 278)
+        	 THEN IFNULL(SUM(IFNULL(dpi.monto, 0)), 0)
+        	 	  + IFNULL(pa.monto_regularizado, 0)
+        	 	  + IFNULL(pa.monto_compensacion, 0)
+        	 ELSE 0
+        END AS total_diploma,
         /* Cuota vencida: saldo > 0, concepto formativo, fecha límite en mes anterior */
         CASE WHEN (pa.monto - pa.descuento_total - SUM(IFNULL(dpi.monto, 0))) > 0
                   AND pa.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
@@ -202,35 +225,78 @@ SELECT
     IFNULL(kardex.pc_monto_recuperacion_asignatura, 0) AS pc_monto_recuperacion_asignatura,
     IFNULL(kardex.pc_monto_adicion_asignatura, 0) AS pc_monto_adicion_asignatura,
     IFNULL(prom.descripcion, '-') AS Desc_Promocion,
-    /* Matricula
+    /* Matricula */
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 1 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Mensualidad_Mat,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 1 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Mensualidad_Mat,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 1 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Mensualidad_Mat,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 1 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Mensualidad_Mat,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 1 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Mensualidad_Mat,
-    DATE(IFNULL(MAX(kardex.fecha_primer_pago_mensualidad), '1900-01-01')) AS fecha_primer_pago_mensualidad_Mat,
-    /* Colegiatura
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_matricula), '1900-01-01')) AS fecha_ultimo_pago_mensualidad_Mat,
+    /* Colegiatura */
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 2 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Formacion_Col,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 2 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Formacion_Col,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 2 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Formacion_Col,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 2 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Formacion_Col,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 2 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Formacion_Col,
-    DATE(IFNULL(MAX(kardex.fecha_primer_pago_formacion), '1900-01-01')) AS fecha_primer_pago_formacion_Col,
-    /* Cuota
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_colegiatura), '1900-01-01')) AS fecha_ultimo_pago_formacion_Col,
+    /* Cuota */
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 312 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Formacion_Cuota,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 312 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Formacion_Cuota,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 312 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Formacion_Cuota,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 312 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Formacion_Cuota,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 312 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Formacion_Cuota,
-    DATE(IFNULL(MAX(kardex.fecha_primer_pago_formacion), '1900-01-01')) AS fecha_primer_pago_formacion_Cuota,
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_cuota), '1900-01-01')) AS fecha_ultimo_pago_formacion_Cuota,
+    /* Servicio Plataforma */
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 314 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Servicio_Plataforma,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 314 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Servicio_Plataforma,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 314 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Servicio_Plataforma,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 314 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Servicio_Plataforma,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 314 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Servicio_Plataforma,
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_servico_plataforma), '1900-01-01')) AS fecha_ultimo_pago_Servicio_Plataforma,
+    /* Deuda Anterior */
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 375 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Deuda_Anterior,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 375 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Deuda_Anterior,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 375 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Deuda_Anterior,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 375 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Deuda_Anterior,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 375 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Deuda_Anterior,
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_deuda_anterior), '1900-01-01')) AS fecha_ultimo_pago_Deuda_Anterior,
+    /* Opcion de Grado */
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 383 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Opcion_Grado,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 383 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Opcion_Grado,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 383 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Opcion_Grado,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 383 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Opcion_Grado,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 383 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Opcion_Grado,
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_opcion_grado), '1900-01-01')) AS fecha_ultimo_pago_Opcion_Grado,
+    /* Recuperacion de Asignatura */
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 388 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Recuperacion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 388 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Recuperacion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 388 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Recuperacion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 388 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Recuperacion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 388 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Recuperacion_Asignatura,
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_recuperacion_asignatura), '1900-01-01')) AS fecha_ultimo_pago_Recuperacion_Asignatura,
+    /* Adicion de Asignatura */
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 389 THEN kardex.pagado ELSE 0 END), 0) AS Pago_Adicion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 389 AND kardex.monto_descuento != 0 THEN kardex.monto_descuento ELSE 0 END), 0) AS Descuento_Adicion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 389 AND kardex.monto_regularizado != 0 THEN kardex.monto_regularizado ELSE 0 END), 0) AS Regularizado_Adicion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 389 AND kardex.monto_compensacion != 0 THEN kardex.monto_compensacion ELSE 0 END), 0) AS Compensacion_Adicion_Asignatura,
+    IFNULL(SUM(CASE WHEN kardex.concepto_pago_id = 389 AND kardex.monto_liquidado != 0 THEN kardex.monto_liquidado ELSE 0 END), 0) AS Liquidado_Adicion_Asignatura,
+    DATE(IFNULL(MAX(kardex.fecha_ultimo_pago_adicion_asignatura), '1900-01-01')) AS fecha_ultimo_pago_Adicion_Asignatura,
     /* Totales y saldos */
     IFNULL(SUM(kardex.total_formativo_cuota), 0) AS Monto_Pagado_Fase_Formativa,
+    IFNULL(SUM(kardex.total_opcion_grado), 0) AS Monto_Pagado_Opcion_Grado,
+    IFNULL(SUM(kardex.total_otros_conceptos), 0) AS Monto_Pagado_Otros_Conceptos,
     IFNULL(SUM(CASE WHEN kardex.saldo > 0 THEN
                     CASE
-                        WHEN kardex.es_contado = 1 AND kardex.concepto_pago_id IN (1, 2, 312, 314, 375, 383, 388, 389) THEN kardex.saldo 
-                        WHEN kardex.es_contado = 0 AND kardex.concepto_pago_id IN (1, 2, 312, 314, 375, 383, 388, 389) THEN kardex.saldo
+                        WHEN kardex.es_contado = 1 AND kardex.concepto_pago_id IN (1, 2, 312, 389) THEN kardex.saldo 
+                        WHEN kardex.es_contado = 0 AND kardex.concepto_pago_id IN (1, 2, 312, 389) THEN kardex.saldo
                         ELSE 0
                     END ELSE 0 END), 0) AS Saldo_Pendiente_Fase_Formativa,
+    IFNULL(SUM(CASE WHEN kardex.saldo > 0 THEN
+                    CASE
+                        WHEN kardex.es_contado = 1 AND kardex.concepto_pago_id IN (383) THEN kardex.saldo 
+                        WHEN kardex.es_contado = 0 AND kardex.concepto_pago_id IN (383) THEN kardex.saldo
+                        ELSE 0
+                    END ELSE 0 END), 0) AS Saldo_Opcion_Grado,
     IFNULL(SUM(CASE WHEN kardex.concepto_pago_id IN (1, 2, 312, 314, 375, 383, 388, 389)
                     THEN IFNULL(kardex.monto_liquidado, 0) ELSE 0 END), 0) AS Monto_Total_Liquidado,
     DATE(IFNULL(MAX(kardex.fecha_pago_max), '1900-01-01')) AS Fecha_Ultimo_Pago,
@@ -266,7 +332,14 @@ SELECT
         WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
         WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin  > CURDATE() THEN 'En mora'
         ELSE 'Sin cartera asignada'
-    END AS Estado_Cartera
+    END AS Estado_Cartera,
+    IFNULL(SUM(kardex.total_diploma), 0) AS Monto_Pagado_Diploma,
+    IFNULL(SUM(CASE WHEN kardex.saldo > 0 THEN
+                    CASE
+                        WHEN kardex.es_contado = 1 AND kardex.concepto_pago_id IN (278, 313) THEN kardex.saldo 
+                        WHEN kardex.es_contado = 0 AND kardex.concepto_pago_id IN (278, 313) THEN kardex.saldo
+                        ELSE 0
+                    END ELSE 0 END), 0) AS Saldo_Diploma
 FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
