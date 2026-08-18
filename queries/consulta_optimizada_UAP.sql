@@ -238,19 +238,19 @@ SELECT
     /* Estado Esam Real: combina estado de inscripción con monto formativo pagado */
     CASE
         WHEN ei.id IN (0,1,2,3,4,5)
-             AND SUM(kardex.total_formativo_cuota) = 0 THEN 'Prospecto'
+             AND SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
         WHEN ei.nombre = 'Retirado'
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Retirado Preinscrito'
+             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Retirado Preinscrito'
         WHEN ei.nombre = 'Retirado'
-             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Retirado Inscrito'
+             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Retirado Inscrito'
         WHEN ei.nombre = 'Cambiado'
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Cambiado Preinscrito'
+             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Cambiado Preinscrito'
         WHEN ei.nombre = 'Cambiado'
-             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Cambiado Inscrito'
+             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Cambiado Inscrito'
         WHEN ei.id IN (0,1,4,5)
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Preinscrito'
+             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Preinscrito'
         WHEN ei.id IN (0,1)
-             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Inscrito'
+             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Inscrito'
         ELSE IFNULL(ei.nombre, 'sin definir')
     END AS Estado_Esam_Real,
     /* Estado Sistema: reglas de negocio v2 basadas en movimientos financieros */
@@ -258,8 +258,8 @@ SELECT
         WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_liquidado,  0) ELSE 0 END) > 0 AND i.estado_administrativo_id = 6 THEN 'Retirado Cambiado'
         WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_liquidado,  0) ELSE 0 END) > 0 THEN 'Retirado'
         WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_compensacion,0) ELSE 0 END) > 0 THEN 'Inscrito Transferido'
-        WHEN SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Inscrito'
-        WHEN SUM(kardex.total_formativo_cuota) >= 100 AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Preinscrito'
+        WHEN SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 871 END) THEN 'Inscrito'
+        WHEN SUM(kardex.total_formativo_cuota) >= 100 AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Preinscrito'
         WHEN SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
         ELSE IFNULL(ei.nombre, 'sin definir')
     END AS Estado_Sistema,
