@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   REPORTE SXX — CARTERA DE PARTICIPANTES
+   REPORTE UAP — CARTERA DE PARTICIPANTES
    Versión: 2.0  |  Refactorización: CTEs + reorganización de columnas
    ══════════════════════════════════════════════════════════════════════════
    ESTRUCTURA:
      CTE 1 · cte_plan_actualizado  → cuotas con descuentos desagregados
      CTE 2 · cte_pcpes             → montos del plan de cobros por concepto
      CTE 3 · cte_kardex            → kardex consolidado por cuota
-     CTE 4 · cte_tram_personal     → pagos de trámites personales por inscripción
-     CTE 5 · cte_promociones       → detalle de promociones
+     CTE 4 · cte_promociones       → detalle de promociones
+     CTE 5 · cte_historial_estado  → última fecha de cambio de estado académico por inscripción
    ══════════════════════════════════════════════════════════════════════════ */
 WITH
 /* ────────────────────────────────────────────────────────────────────────
@@ -25,10 +25,10 @@ cte_plan_actualizado AS (
         pcp.id   AS plan_pago_id,
         pcp.nombre AS plan_pago,
         p.fecha_fin,
-        SUM(IF(m.tipo_descuento_id = 2, ppd.monto, 0)) AS monto_descuento,
         SUM(IF(m.tipo_descuento_id = 1, ppd.monto, 0)) AS monto_regularizado,
-        SUM(IF(m.tipo_descuento_id = 4, ppd.monto, 0)) AS monto_compensacion,
+        SUM(IF(m.tipo_descuento_id = 2, ppd.monto, 0)) AS monto_descuento,
         SUM(IF(m.tipo_descuento_id = 3, ppd.monto, 0)) AS monto_liquidado,
+        SUM(IF(m.tipo_descuento_id = 4, ppd.monto, 0)) AS monto_compensacion,
         SUM(IFNULL(ppd.monto, 0)) AS descuento_total
     FROM plan_pagos pp
     JOIN  inscripciones i ON i.id = pp.inscripcion_id
@@ -51,7 +51,7 @@ cte_pcpes AS (
     SELECT
         pcp.id,
         SUM(IF(cp.concepto_pago_id = 133, cp.monto, 0)) AS pc_monto_matricula,
-        SUM(IF(cp.concepto_pago_id = 2, cp.monto, 0)) AS pv_monto_colegiatura,
+        SUM(IF(cp.concepto_pago_id = 2, cp.monto, 0)) AS pc_monto_colegiatura,
         SUM(IF(cp.concepto_pago_id = 3, cp.monto, 0)) AS pc_monto_titulacion
     FROM plan_cobros_programa pcp
     JOIN cobros_programa cp ON cp.plan_cobro_programa_id = pcp.id
@@ -64,7 +64,7 @@ cte_kardex AS (
     SELECT
         pa.id,
         pa.nro_cuota,
-        pa.fecha_pago          AS fecha_limite_pago,
+        pa.fecha_pago AS fecha_limite_pago,
         pa.concepto_pago_id,
         pa.inscripcion_id,
         pa.plan_pago,
@@ -74,7 +74,7 @@ cte_kardex AS (
         pa.monto_compensacion,
         pa.monto_liquidado,
         pc.pc_monto_matricula,
-        pc.pv_monto_colegiatura,
+        pc.pc_monto_colegiatura,
         pc.pc_monto_titulacion,
         /* Pagos efectivos de la cuota */
         SUM(IFNULL(dpi.monto, 0)) AS pagado,
@@ -108,41 +108,39 @@ cte_kardex AS (
 		MAX(CASE WHEN pa.concepto_pago_id = 3 THEN dpi.fecha_registro_pago END) AS fecha_ultimo_pago_titulacion,
         /* Última fecha de pago por concepto (para columnas individuales en query principal) */
         MIN(CASE WHEN pa.concepto_pago_id = 133 THEN dpi.fecha_registro_pago END) AS fecha_primer_pago_matricula,
-        MIN(CASE WHEN pa.concepto_pago_id = 2 THEN dpi.fecha_registro_pago END) AS fecha_primer_pago_colegiatura    
+        MIN(CASE WHEN pa.concepto_pago_id = 2 THEN dpi.fecha_registro_pago END) AS fecha_primer_pago_colegiatura,
+        MIN(CASE WHEN pa.concepto_pago_id = 3 THEN dpi.fecha_registro_pago END) AS fecha_primer_pago_titulacion    
 	FROM cte_plan_actualizado pa
     JOIN cte_pcpes pc ON pc.id = pa.plan_pago_id
     LEFT JOIN detalle_pagos_inscripcion dpi ON dpi.cuota_id = pa.id AND dpi.estado = 1
     GROUP BY pa.id
 ),
 /* ────────────────────────────────────────────────────────────────────────
-   CTE 4 · Trámites personales agregados por inscripción
-   Corrección: se agrega SUM(monto) para evitar duplicados en el JOIN
-   ──────────────────────────────────────────────────────────────────────── */
-cte_tram_personal AS (
-    SELECT
-        i.id AS inscripcion_id,
-        SUM(dpi.monto) AS monto_tram_personal
-    FROM productionacademicoesamdb.inscripciones i
-    JOIN productionacademicoesamdb.pagos_inscripcion t ON t.inscripcion_id = i.id
-    JOIN productionacademicoesamdb.detalle_pagos_inscripcion dpi ON dpi.pagos_inscripcion_id = t.id
-    WHERE dpi.concepto_pago_id IN (105, 116, 117, 118)
-    GROUP BY i.id
-),
-/* ────────────────────────────────────────────────────────────────────────
-   CTE 5 · Promociones con detalle por concepto
+   CTE 4 · Promociones con detalle por concepto
    ──────────────────────────────────────────────────────────────────────── */
 cte_promociones AS (
     SELECT
         p4.id,
         p4.nombre,
         p4.descripcion,
-        MAX(IF(dp.concepto_id = 1, dp.isporcentaje,    NULL)) AS mat_isporcent,
-        MAX(IF(dp.concepto_id = 1, dp.valor_descuento, NULL)) AS mat_valor,
-        MAX(IF(dp.concepto_id = 2, dp.isporcentaje,    NULL)) AS col_isporcent,
+        MAX(IF(dp.concepto_id = 133, dp.isporcentaje, NULL)) AS mat_isporcent,
+        MAX(IF(dp.concepto_id = 133, dp.valor_descuento, NULL)) AS mat_valor,
+        MAX(IF(dp.concepto_id = 2, dp.isporcentaje, NULL)) AS col_isporcent,
         MAX(IF(dp.concepto_id = 2, dp.valor_descuento, NULL)) AS col_valor
     FROM promociones p4
     JOIN detalle_promociones dp ON dp.promocion_id = p4.id
     GROUP BY p4.id, p4.nombre, p4.descripcion
+),
+/* ────────────────────────────────────────────────────────────────────────
+   CTE 5 · Última fecha de cambio de estado académico por inscripción
+   Corrección: GROUP BY para evitar multiplicación de filas en el JOIN principal
+   ──────────────────────────────────────────────────────────────────────── */
+cte_historial_estado AS (
+    SELECT
+        inscripcion_id,
+        MAX(fecha_cambio) AS fecha_cambio
+    FROM historial_estados_academicos
+    GROUP BY inscripcion_id
 )
 /* ══════════════════════════════════════════════════════════════════════════
    QUERY PRINCIPAL
@@ -159,7 +157,7 @@ SELECT
         WHEN c.nombre = 'Diplomado'    THEN CONCAT_WS('-', 'D', p.id)
         WHEN c.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
         WHEN c.nombre = 'Maestría'     THEN CONCAT_WS('-', 'M', p.id)
-    END AS Id_Esam,
+    END AS Id_Portal,
     IFNULL(p.codigo, 'sin definir') AS Cod_Contable,
     p.nombre_compuesto AS Programa,
     p.gestion AS Gestion,
@@ -175,7 +173,7 @@ SELECT
     IFNULL(kardex.plan_pago, '-') AS Plan_Pago,
     IF(MAX(kardex.es_contado) = 1, 'Contado', 'Crédito') AS Tipo_Plan_Pago,
     IFNULL(kardex.pc_monto_matricula, 0) AS PC_Monto_Matricula,
-    IFNULL(kardex.pv_monto_colegiatura, 0) AS PV_Monto_Colegiatura,
+    IFNULL(kardex.pc_monto_colegiatura, 0) AS pc_monto_colegiatura,
     IFNULL(kardex.pc_monto_titulacion, 0) AS PC_Monto_Titulacion,
     IFNULL(prom.descripcion, '-') AS Desc_Promocion,
     /* Matrícula */
@@ -205,7 +203,7 @@ SELECT
     IFNULL(SUM(CASE WHEN kardex.saldo > 0 THEN
                     CASE
                         WHEN kardex.es_contado = 1 AND kardex.concepto_pago_id  = 2 THEN kardex.saldo
-                        WHEN kardex.es_contado = 0 AND kardex.concepto_pago_id IN (1,2) THEN kardex.saldo
+                        WHEN kardex.es_contado = 0 AND kardex.concepto_pago_id IN (133,2) THEN kardex.saldo
                         ELSE 0
                     END ELSE 0 END), 0) AS Saldo_Pendiente_Fase_Formativa,
     IFNULL(SUM(CASE WHEN kardex.saldo > 0 AND kardex.concepto_pago_id = 3
@@ -221,56 +219,21 @@ SELECT
         WHEN MAX(det_pag.concepto_pago_id) = 2 THEN 'Colegiatura'
         WHEN MAX(det_pag.concepto_pago_id) = 3 THEN 'Titulacion'
     END, 'sin definir') AS Concepto_Ultimo_Pago,
-    IFNULL(tram.monto_tram_personal, 0) AS Tram_Personal,
     /* ── § 4 · ESTADOS ───────────────────────────────────────────────── */
-    CASE i.estado_administrativo_id
-        WHEN 1 THEN 'Prospecto'
-        WHEN 2 THEN 'Preinscrito'
-        WHEN 3 THEN 'Inscrito'
-        WHEN 4 THEN 'Inscrito Transferido'
-        WHEN 5 THEN 'Retirado'
-        WHEN 6 THEN 'Retirado Cambiado'
-        WHEN 7 THEN 'Observado'
-        ELSE 'Otro'
-    END AS Estado_Administrativo,
-    IFNULL(ea.nombre, 'sin definir') AS Estado_Academico,
-    ei.nombre AS Estado_Esam,
-    /* Estado Esam Real: combina estado de inscripción con monto formativo pagado */
+    /* Estados desde el portal (valores registrados en BD) */
+    IFNULL(ei.nombre, 'sin definir') AS Estado_Ins_Portal,
+    IFNULL(ea3.nombre, 'sin definir') AS Estado_Admin_Portal,
+    IFNULL(ea.nombre, 'sin definir') AS Estado_Acad_Portal,
+    DATE(IFNULL(hea.fecha_cambio, '1900-01-01')) AS Fecha_Cambio_Estado,
+    /* Estado Cartera Sistema: 7 niveles */
     CASE
-        WHEN ei.id IN (0,1,2,3,4,5)
-             AND SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
-        WHEN ei.nombre = 'Retirado'
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Retirado Preinscrito'
-        WHEN ei.nombre = 'Retirado'
-             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Retirado Inscrito'
-        WHEN ei.nombre = 'Cambiado'
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Cambiado Preinscrito'
-        WHEN ei.nombre = 'Cambiado'
-             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Cambiado Inscrito'
-        WHEN ei.id IN (0,1,4,5)
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Preinscrito'
-        WHEN ei.id IN (0,1)
-             AND SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Inscrito'
-        ELSE IFNULL(ei.nombre, 'sin definir')
-    END AS Estado_Esam_Real,
-    /* Estado Sistema: reglas de negocio v2 basadas en movimientos financieros */
-    CASE
-        WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_liquidado,  0) ELSE 0 END) > 0 AND i.estado_administrativo_id = 6 THEN 'Retirado Cambiado'
-        WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_liquidado,  0) ELSE 0 END) > 0 THEN 'Retirado'
-        WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_compensacion,0) ELSE 0 END) > 0 THEN 'Inscrito Transferido'
-        WHEN SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 871 END) THEN 'Inscrito'
-        WHEN SUM(kardex.total_formativo_cuota) >= 100 AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 583 ELSE 781 END) THEN 'Preinscrito'
-        WHEN SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
-        ELSE IFNULL(ei.nombre, 'sin definir')
-    END AS Estado_Sistema,
-    /* Estado Cartera: basado en cuotas vencidas vs saldo */
-    CASE
-        WHEN SUM(kardex.es_cuota_vencida) = 0 AND SUM(kardex.es_cuota_con_saldo) > 0 THEN 'Vigente'
-        WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins != 2 THEN 'Exento de deuda'
+        WHEN kardex.inscripcion_id IS NULL THEN 'Sin cartera asignada'
         WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins = 2 THEN 'Liquidado'
+        WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins != 2 THEN 'Exento de deuda'
+        WHEN SUM(kardex.es_cuota_vencida) = 0 AND SUM(kardex.es_cuota_con_saldo) > 0 THEN 'Vigente'
         WHEN SUM(kardex.es_cuota_vencida) BETWEEN 1 AND 2 THEN 'Retrasado'
+        WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin > CURDATE() THEN 'En mora'
         WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
-        WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin  > CURDATE() THEN 'En mora'
         ELSE 'Sin cartera asignada'
     END AS Estado_Cartera
 FROM inscripciones i
@@ -279,6 +242,7 @@ INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
 INNER JOIN categorias c ON c.id = p2.idcategoria
 LEFT JOIN estados_academicos ea ON ea.id = i.estado_academico_id
 LEFT JOIN estados_academicos ea2 ON ea2.id = ea.estado_academico_padre_id
+LEFT JOIN estados_administrativos ea3 ON ea3.id = i.estado_administrativo_id
 INNER JOIN productionadminesamdb.personas p3 ON p3.id = i.idestudiante
 LEFT JOIN programa_universidad pu ON pu.id = p.programa_universidad_id
 INNER JOIN productionadminesamdb.sedes s ON s.id = p.idsede
@@ -290,8 +254,8 @@ LEFT JOIN cte_kardex kardex ON kardex.inscripcion_id = i.id
 LEFT JOIN detalle_pagos_inscripcion det_pag ON det_pag.id = kardex.id_dpi_max
 /* Promociones */
 LEFT JOIN cte_promociones prom ON prom.id = i.promocion_id
-/* Trámites personales ya agregados por inscripción */
-LEFT JOIN cte_tram_personal tram ON tram.inscripcion_id = i.id
+/* Última fecha de cambio de estado académico */
+LEFT  JOIN cte_historial_estado hea ON hea.inscripcion_id = i.id
 WHERE ei.id IN (0, 1, 2, 3, 4, 5)
   AND c.nombre IN ('Diplomado', 'Especialidad', 'Maestría')
   AND s.id IN (107,24,31,30,32,42,29,33,28,53,27)
