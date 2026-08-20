@@ -329,7 +329,7 @@ LEFT  JOIN cte_modulos mods ON mods.programa_universidad_id = pu.id
 /* Progreso académico del estudiante */
 LEFT  JOIN cte_progreso prg ON prg.ipu_id = ipu.id
 /* Última fecha de cambio de estado académico */
-LEFT  JOIN cte_historial_estado hea ON hea.inscripcion_id = i.id
+LEFT  JOIN cte_historial_estado hea ON i.id = hea.inscripcion_id
 WHERE ei.id IN (0, 1, 2, 3, 4, 5)
   AND c.nombre IN ('Diplomado', 'Especialidad', 'Maestría')
   AND s.id IN (1,2,3,4,5,6,7,8,14,15,16,18,20,22,23,24,25,26,37,50,52,80,125,127,128,129)
