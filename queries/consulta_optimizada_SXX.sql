@@ -302,6 +302,16 @@ SELECT
         WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
         ELSE 'Sin cartera asignada'
     END AS Estado_Cartera_Sistema
+    CASE 
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins !=2 and i.estado_ins !=3 THEN 'Exento de deuda'
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins !=2 and i.estado_ins !=3 THEN 'Liquidado'
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins =3 THEN 'Liquidado'
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 THEN 'Vigente'
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) BETWEEN 1 AND 2 THEN 'Retrasado'
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) >= 3 OR p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
+        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) >= 3 THEN 'En mora'
+        ELSE 'Sin cartera asignada' 
+    END as estado_cartera
 FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
