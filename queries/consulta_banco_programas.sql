@@ -3,9 +3,9 @@ SELECT
     IFNULL(pu.codigo, "SIN ASIGNAR") AS cod_academico,
     IFNULL(p.codigo, "SIN ASIGNAR") AS cod_contable,
     CASE
-        WHEN c.nombre = 'Diplomado'   THEN CONCAT_WS('-', 'D', p.id)
+        WHEN c.nombre = 'Diplomado' THEN CONCAT_WS('-', 'D', p.id)
         WHEN c.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
-        WHEN c.nombre = 'Maestría'    THEN CONCAT_WS('-', 'M', p.id)
+        WHEN c.nombre = 'Maestría'THEN CONCAT_WS('-', 'M', p.id)
     END AS id_portal,
     s.nombre AS sede,
     c.nombre AS tipo,
