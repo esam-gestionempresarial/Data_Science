@@ -1,19 +1,19 @@
 SELECT
   IFNULL(pu.programa_unico_id,"SIN ASIGNAR") AS Cod_Unico,
-  COALESCE(pu.codigo, '') AS codAcademico,
+  COALESCE(pu.codigo, '') AS Cod_Academico,
   CASE
-	  WHEN cat.nombre = 'Diplomado'    THEN CONCAT_WS('-', 'D', p.id)
-      WHEN cat.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
-      WHEN cat.nombre = 'Maestría'     THEN CONCAT_WS('-', 'M', p.id)
-  END AS Id_Esam,
-  i.id AS id_inscripcion_potal,
-  ipu.id AS id_inscripcion_universidad,
+	  WHEN cat.nombre = 'Diplomado'    THEN CONCAT_WS('-', 'D', prog.id)
+      WHEN cat.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', prog.id)
+      WHEN cat.nombre = 'Maestría'     THEN CONCAT_WS('-', 'M', prog.id)
+  END AS Id_Portal,
+  prog.nombre_compuesto AS Programa,
+  prog.gestion AS Gestion,
+  cat.nombre AS Tipo,
+  s.nombre AS Sede,
+  i.id AS id_ins_potal,
+  ipu.id AS id_ins_SXX,
   p.num_doc AS ci,
-  CONCAT_WS(' ', p.nombres, p.pri_apellido, p.seg_apellido) AS Nombre,
-  prog.gestion,
-  prog.nombre_compuesto AS programa,
-  s.nombre AS programaSede,
-  cat.nombre AS tipo,
+  CONCAT_WS(' ', p.nombres, p.pri_apellido, p.seg_apellido) AS Alumno,
   pu.notas_importadas AS notasImportadas,
   ipu.codigo_empastado AS codigoEmpastado,
   -- módulos (alimentan DNA y programacionCompleta)
@@ -26,8 +26,7 @@ SELECT
   -- ── Estado Académico Portal (mapearEstadoAcademicoESAM) ──
   CASE
     WHEN eac.nombre IS NULL OR TRIM(eac.nombre) = '' THEN 'Sin estado'
-    WHEN LOWER(TRIM(eac.nombre)) IN (
-      'elaboracion trabajo','elaboracion de trabajo','concluido aprobado',
+    WHEN LOWER(TRIM(eac.nombre)) IN ('elaboracion trabajo','elaboracion de trabajo','concluido aprobado',
       'aprobado trabajo final','entrega de trabajo','pre-defensa','defensa final'
     ) THEN 'Concluido'
     WHEN LOWER(TRIM(eac.nombre)) IN ('vigente','en desarrollo') THEN 'En Desarrollo'
@@ -35,7 +34,7 @@ SELECT
     WHEN LOWER(TRIM(eac.nombre)) IN ('abandono','abandono academico') THEN 'Abandono académico'
     WHEN LOWER(TRIM(eac.nombre)) = 'reprobado' THEN 'Reprobado'
     ELSE eac.nombre
-  END AS estadoAcademicoPortal,
+  END AS Estado_Acad_Portal,
   -- ── Estado Académico DNA (solo rama notas_importadas = 1) ──
   CASE
     WHEN pu.notas_importadas <> 1 THEN 'Pendiente (notas no importadas)'
@@ -43,7 +42,7 @@ SELECT
     WHEN COALESCE(prg.programados, 0) < mods.total THEN '-'   -- faltan módulos por programar
     WHEN COALESCE(prg.reprobadas, 0) > 0 THEN 'Abandono académico'
     ELSE 'Concluido'
-  END AS estadoAcademicoDNA
+  END AS Estado_Acad_Sistema
 FROM inscripcion_programa_universidad ipu
 INNER JOIN inscripciones i ON i.id = ipu.inscripcion_id
 INNER JOIN programa_universidad pu ON pu.id = ipu.programa_universidad_id
