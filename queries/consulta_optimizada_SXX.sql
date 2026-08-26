@@ -200,7 +200,7 @@ SELECT
         WHEN c.nombre = 'Diplomado' THEN CONCAT_WS('-', 'D', p.id)
         WHEN c.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', p.id)
         WHEN c.nombre = 'Maestría' THEN CONCAT_WS('-', 'M', p.id)
-    END AS Id_Esam,
+    END AS Id_Portal,
     IFNULL(p.codigo, 'sin definir') AS Cod_Contable,
     p.nombre_compuesto AS Programa,
     p.gestion AS Gestion,
@@ -208,7 +208,7 @@ SELECT
     s.nombre AS Sede,
     i2.abreviatura AS Convenio,
     /* ── § 2 · DATOS DEL PARTICIPANTE ────────────────────────────────── */
-    i.id AS Id_Inscripcion,
+    i.id AS id_ins_portal,
     CONCAT_WS(' ', p3.pri_apellido, p3.seg_apellido, p3.nombres) AS Alumno,
     p3.num_doc AS CI,
     IF(i.es_regularizado = 1, 'REGULARIZADO', 'NORMAL') AS Es_Regularizado,
@@ -269,8 +269,27 @@ SELECT
     /* Estados desde el portal (valores registrados en BD) */
     IFNULL(ei.nombre, 'sin definir') AS Estado_Ins_Portal,
     IFNULL(ea3.nombre, 'sin definir') AS Estado_Admin_Portal,
-    IFNULL(ea.nombre, 'sin definir') AS Estado_Acad_Portal,
+    CASE
+        WHEN ea.nombre IS NULL OR TRIM(ea.nombre) = '' THEN 'Sin estado'
+        WHEN LOWER(TRIM(ea.nombre)) IN ('elaboracion trabajo','elaboracion de trabajo','concluido aprobado',
+                                        'aprobado trabajo final','entrega de trabajo','pre-defensa','defensa final') THEN 'Concluido'
+        WHEN LOWER(TRIM(ea.nombre)) IN ('vigente','en desarrollo') THEN 'En Desarrollo'
+        WHEN LOWER(TRIM(ea.nombre)) = 'en desarrollo - nivelacion' THEN 'En Desarrollo - Nivelación'
+        WHEN LOWER(TRIM(ea.nombre)) IN ('abandono','abandono academico') THEN 'Abandono académico'
+        WHEN LOWER(TRIM(ea.nombre)) = 'reprobado' THEN 'Reprobado'
+        ELSE ea.nombre
+    END AS Estado_Acad_Portal,
     DATE(IFNULL(hea.fecha_cambio, '1900-01-01')) AS Fecha_Cambio_Estado,
+    CASE 
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins !=2 and i.estado_ins !=3 THEN 'Exento de deuda'
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins !=2 and i.estado_ins !=3 THEN 'Liquidado'
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins =3 THEN 'Liquidado'
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.fecha_limite_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) = 0 THEN 'Vigente'
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.fecha_limite_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) BETWEEN 1 AND 2 THEN 'Retrasado'
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.fecha_limite_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) >= 3 OR p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
+        WHEN COUNT(CASE WHEN kardex.saldo > 0 AND kardex.fecha_limite_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND kardex.concepto_pago_id IN (1, 2) THEN 1 END) >= 3 THEN 'En mora'
+        ELSE 'Sin cartera asignada'
+    END as Estado_Cartera_Portal,
     /* Estado Administrativo Sistema: reglas de negocio por movimientos financieros */
     CASE
         WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_liquidado, 0) ELSE 0 END) > 0
@@ -278,47 +297,16 @@ SELECT
         WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_liquidado, 0) ELSE 0 END) > 0 THEN 'Retirado'
         WHEN SUM(CASE WHEN kardex.concepto_pago_id IN (1,2) THEN IFNULL(kardex.monto_compensacion,0) ELSE 0 END) > 0 THEN 'Inscrito Transferido'
         WHEN SUM(kardex.total_formativo_cuota) >= (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Inscrito'
-        WHEN SUM(kardex.total_formativo_cuota) >= 100
-             AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Preinscrito'
+        WHEN SUM(kardex.total_formativo_cuota) >= 100 AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Preinscrito'
         WHEN SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
         ELSE IFNULL(ei.nombre, 'sin definir')
-    END AS Estado_Admin_Sistema,
-    /* Estado Académico Sistema: basado en progreso de módulos e importación de notas */
-    CASE
-        WHEN pu.notas_importadas <> 1 THEN 'Pendiente (notas no importadas)'
-        WHEN COALESCE(mods.total, 0) = 0 THEN '-'
-        WHEN COALESCE(prg.programados, 0) < mods.total THEN '-'
-        WHEN COALESCE(prg.reprobadas,  0) > 0 THEN 'Abandono académico'
-        ELSE 'Concluido'
-    END AS Estado_Acad_Sistema,
-    /* Estado Cartera Sistema: 7 niveles */
-    CASE
-        WHEN kardex.inscripcion_id IS NULL THEN 'Sin cartera asignada'
-        WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins = 2 THEN 'Liquidado'
-        WHEN SUM(kardex.es_cuota_con_saldo) = 0 AND i.estado_ins != 2 THEN 'Exento de deuda'
-        WHEN SUM(kardex.es_cuota_vencida) = 0 AND SUM(kardex.es_cuota_con_saldo) > 0 THEN 'Vigente'
-        WHEN SUM(kardex.es_cuota_vencida) BETWEEN 1 AND 2 THEN 'Retrasado'
-        WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin > CURDATE() THEN 'En mora'
-        WHEN SUM(kardex.es_cuota_vencida) >= 3 AND p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
-        ELSE 'Sin cartera asignada'
-    END AS Estado_Cartera_Sistema
-    CASE 
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins !=2 and i.estado_ins !=3 THEN 'Exento de deuda'
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins !=2 and i.estado_ins !=3 THEN 'Liquidado'
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 and i.estado_ins =3 THEN 'Liquidado'
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) = 0 THEN 'Vigente'
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) BETWEEN 1 AND 2 THEN 'Retrasado'
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) >= 3 OR p.fecha_fin <= CURDATE() THEN 'Riesgo de incobrabilidad'
-        WHEN COUNT(CASE WHEN pp.saldo > 0 AND pp.fecha_pago < LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND pp.concepto_pago_id IN (1, 2) THEN 1 END) >= 3 THEN 'En mora'
-        ELSE 'Sin cartera asignada' 
-    END as estado_cartera
+    END AS Estado_Admin_Sistema
 FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
 INNER JOIN categorias c ON c.id = p2.idcategoria
 INNER JOIN estados_inscripcion ei ON ei.id = i.estado_ins
 LEFT JOIN estados_academicos ea ON ea.id = i.estado_academico_id
-LEFT JOIN estados_academicos ea2 ON ea2.id = ea.estado_academico_padre_id
 LEFT JOIN estados_administrativos ea3 ON ea3.id = i.estado_administrativo_id
 LEFT JOIN programa_universidad pu ON pu.id = p.programa_universidad_id
 /* Vínculo necesario para Estado_Acad_Sistema (progreso de módulos) */
