@@ -6,10 +6,9 @@
     la última titulación registrada para cada persona.
 */
 SELECT
-    i.persona_id AS persona_id,
+    i.inscripcion_universidad_id AS id_ins_sxx,
     i.estado AS estado_investigacion,
     t.estado AS estado_titulacion,
-    i.inscripcion_universidad_id AS id_inscripcion_universidad
 FROM db_esam_dna.investigaciones i
 LEFT JOIN db_esam_dna.titulaciones t
     ON t.persona_id = i.persona_id
