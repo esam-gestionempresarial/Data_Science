@@ -2,9 +2,9 @@ SELECT
   IFNULL(pu.programa_unico_id,"SIN ASIGNAR") AS Cod_Unico,
   COALESCE(pu.codigo, '') AS Cod_Academico,
   CASE
-	  WHEN cat.nombre = 'Diplomado'    THEN CONCAT_WS('-', 'D', prog.id)
+	  WHEN cat.nombre = 'Diplomado' THEN CONCAT_WS('-', 'D', prog.id)
       WHEN cat.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', prog.id)
-      WHEN cat.nombre = 'Maestría'     THEN CONCAT_WS('-', 'M', prog.id)
+      WHEN cat.nombre = 'Maestría' THEN CONCAT_WS('-', 'M', prog.id)
   END AS Id_Portal,
   prog.nombre_compuesto AS Programa,
   prog.gestion AS Gestion,
