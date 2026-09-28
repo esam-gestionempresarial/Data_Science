@@ -26,6 +26,7 @@ SELECT
     END AS fase,
     IFNULL(ep.nombre, "sin registrar") AS estado,
     DATE(p.fecha_registro) AS fecha_registro_prog_portal,
+    DATE(peh.fecha_inicio) AS fecha_inicio_comercializacion,
     p.fecha_inicio AS fecha_inicio_prog_portal,
     p.fecha_fin AS fecha_fin_prog_portal,
     pu.fecha_inicio AS fecha_inicio_prog_univ,
@@ -40,6 +41,7 @@ LEFT JOIN postgrados p2 ON p.idpostgrado = p2.id
 LEFT JOIN categorias c ON p2.idcategoria = c.id
 LEFT JOIN programa_universidad pu ON p.programa_universidad_id = pu.id
 LEFT JOIN estados_programas ep ON p.estado_programa_id = ep.id
+LEFT JOIN programa_estado_historial peh ON p.id = peh.programa_id AND peh.estado_programa_id = 4
 LEFT JOIN inscripciones i ON i.idprograma = p.id
 LEFT JOIN modulo_programa_universidad mpu ON pu.id = mpu.programa_universidad_id
 LEFT JOIN sede_universidad su ON pu.sede_universidad_id = su.id
@@ -61,5 +63,6 @@ LEFT JOIN (
     WHERE rnk = 1
 ) ult_mod ON ult_mod.idprograma = p.id
 WHERE c.nombre REGEXP '^(Dip|Maes|Esp|Curso|Carrera|licenciatura|Téc)'
-GROUP BY i2.abreviatura, s.nombre, c.nombre, pu.codigo, p.codigo, Id_Portal, p.nombre_compuesto, ep.parent_id, ep.nombre, p.estado_programa_id, p.fecha_inicio, p.fecha_fin, ult_mod.numero, fecha_registro_prog_portal
+GROUP BY i2.abreviatura, s.nombre, c.nombre, pu.codigo, p.codigo, Id_Portal, p.nombre_compuesto, ep.parent_id, ep.nombre, p.estado_programa_id, 
+		p.fecha_inicio, p.fecha_fin, ult_mod.numero, fecha_registro_prog_portal, fecha_inicio_comercializacion
 ORDER BY pu.programa_unico_id ASC
