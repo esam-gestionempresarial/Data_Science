@@ -152,6 +152,24 @@ cte_historial_estado AS (
         MAX(fecha_cambio) AS fecha_cambio
     FROM historial_estados_academicos
     GROUP BY inscripcion_id
+),
+/* ────────────────────────────────────────────────────────────────────────
+   CTE 9 · Colegiatura, cuota 1 — aplica a ambas modalidades (posgrados)
+   ──────────────────────────────────────────────────────────────────────── */
+cte_colegiatura_c1 AS (
+    SELECT
+        pp.inscripcion_id,
+        pp.monto AS monto_colegiatura_c1,
+        pp.saldo AS saldo_colegiatura_c1,
+        MAX(dpi.fecha_registro_pago) AS fecha_primer_pago_colegiatura,
+        MAX(pi.nro_recibo) AS nro_recibo_colegiatura
+    FROM productionacademicoesamdb.plan_pagos pp
+    LEFT JOIN productionacademicoesamdb.detalle_pagos_inscripcion dpi
+           ON dpi.cuota_id = pp.id AND dpi.estado = 1
+    LEFT JOIN productionacademicoesamdb.pagos_inscripcion pi
+           ON pi.id = dpi.pagos_inscripcion_id AND pi.estado = 1
+    WHERE pp.concepto_pago_id = 2 AND pp.nro_cuota = 1
+    GROUP BY pp.inscripcion_id, pp.monto, pp.saldo
 )
 /* ══════════════════════════════════════════════════════════════════════════
    QUERY PRINCIPAL
@@ -279,7 +297,8 @@ SELECT
         WHEN SUM(kardex.total_formativo_cuota) >= 100 AND SUM(kardex.total_formativo_cuota) < (CASE WHEN c.nombre = 'Diplomado' THEN 600 ELSE 800 END) THEN 'Preinscrito'
         WHEN SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
         ELSE IFNULL(ei.nombre, 'sin definir')
-    END AS Estado_Admin_Sistema
+    END AS Estado_Admin_Sistema,
+    IFNULL(cc1.monto_colegiatura_c1, 0) AS MONTO_COLEGIATURA_CUOTA1
 FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
@@ -288,7 +307,7 @@ INNER JOIN estados_inscripcion ei ON ei.id = i.estado_ins
 LEFT JOIN estados_academicos ea ON ea.id = i.estado_academico_id
 LEFT JOIN estados_administrativos ea3 ON i.estado_administrativo_id = ea3.id
 LEFT JOIN programa_universidad pu ON pu.id = p.programa_universidad_id
-LEFT  JOIN inscripcion_programa_universidad ipu ON ipu.inscripcion_id = i.id
+LEFT JOIN inscripcion_programa_universidad ipu ON ipu.inscripcion_id = i.id
 INNER JOIN productionadminesamdb.personas p3  ON p3.id  = i.idestudiante
 INNER JOIN productionadminesamdb.sedes s ON s.id = p.idsede
 INNER JOIN productionadminesamdb.instituciones i2 ON i2.id = p.iduniversidad
@@ -296,7 +315,8 @@ LEFT JOIN cte_kardex kardex ON kardex.inscripcion_id = i.id
 LEFT JOIN detalle_pagos_inscripcion det_pag ON det_pag.id = kardex.id_dpi_max
 LEFT JOIN cte_promociones prom ON prom.id = i.promocion_id
 LEFT JOIN cte_tram_personal tram ON tram.inscripcion_id = i.id
-LEFT  JOIN cte_historial_estado hea ON i.id = hea.inscripcion_id
+LEFT JOIN cte_historial_estado hea ON i.id = hea.inscripcion_id
+LEFT JOIN cte_colegiatura_c1 cc1 ON i.id = cc1.inscripcion_id
 WHERE ei.id IN (0, 1, 2, 3, 4, 5) AND c.nombre IN ('Diplomado', 'Especialidad', 'Maestría')
   AND s.id IN (24,27,28,29,30,31,32,33,42,53,107, /* Sedes DBS */
 				1,2,3,4,5,6,7,8,14,15,16,18,20,22,23,25,26,37,50,51,52,80,125,127,128,129,132,134) /* Sedes Esam */
