@@ -213,6 +213,8 @@ SELECT
     i.id AS Id_Inscripcion,
     CONCAT_WS(' ', p3.pri_apellido, p3.seg_apellido, p3.nombres) AS Alumno,
     p3.num_doc AS CI,
+    IF(i.es_regularizado = 1, 'REGULARIZADO', 'NORMAL') AS Es_Regularizado,
+    DATE(i.created_at) AS Fecha_Creacion,
     /* ── § 3 · KARDEX / HISTORIAL DE PAGOS ───────────────────────────── */
     IFNULL(kardex.plan_pago, '-') AS Plan_Pago,
     IF(MAX(kardex.es_contado) = 1, 'Contado', 'Crédito') AS Tipo_Plan_Pago,
