@@ -10,6 +10,7 @@ SELECT
     s.nombre AS sede,
     c.nombre AS tipo,
     IFNULL(au.nombre,"sin registrar") AS area,
+    IFNULL(pu.modalidad,"sin registrar") AS modalidad,
     i2.abreviatura AS convenio,
     p.nombre_compuesto AS programa,
     IFNULL(pu.version,"sin registrar") AS version,
@@ -19,9 +20,10 @@ SELECT
     IFNULL(pu.numero_creditos_ceub,"sin registrar") AS numero_creditos_ceub,
     IFNULL(su.nombre,"sin registrar") AS sede_universidad,
     CASE
-        WHEN ep.parent_id = 1 THEN "Comercialización"
-        WHEN ep.parent_id = 2 THEN "Desarrollo"
-        WHEN ep.parent_id = 3 THEN "Culminado"
+        WHEN ep.id IN (1,4,5,8,9,10) THEN "Comercialización"
+        WHEN ep.id IN (2,11,12,13,16) THEN "Desarrollo"
+        WHEN ep.id IN (3,14) THEN "Culminado"
+        WHEN ep.id IN (15,6,7) THEN "Desarrollo con Admisión"
         ELSE "sin registrar"
     END AS fase,
     IFNULL(ep.nombre, "sin registrar") AS estado,
