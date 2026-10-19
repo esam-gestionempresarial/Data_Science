@@ -298,7 +298,7 @@ SELECT
         WHEN SUM(kardex.total_formativo_cuota) < 100 THEN 'Prospecto'
         ELSE IFNULL(ei.nombre, 'sin definir')
     END AS Estado_Admin_Sistema,
-    IFNULL(cc1.monto_colegiatura_c1, 0) AS MONTO_COLEGIATURA_CUOTA1
+    IFNULL(MAX(cc1.monto_colegiatura_c1), 0) AS MONTO_COLEGIATURA_CUOTA1
 FROM inscripciones i
 INNER JOIN programas p ON p.id = i.idprograma
 INNER JOIN postgrados p2 ON p2.id = p.idpostgrado
