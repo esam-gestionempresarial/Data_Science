@@ -1,4 +1,5 @@
 select
+	pu.programa_unico_id as cod_unico,
 	pu.codigo as cod_academico,
 	IFNULL(CASE
 		WHEN cu.nombre = 'Diplomado' THEN CONCAT_WS('-', 'D', i.idprograma)
