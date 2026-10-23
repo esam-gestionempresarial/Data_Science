@@ -1,11 +1,7 @@
 select
 	pu.programa_unico_id as cod_unico,
 	pu.codigo as cod_academico,
-	IFNULL(CASE
-		WHEN cu.nombre = 'Diplomado' THEN CONCAT_WS('-', 'D', i.idprograma)
-        WHEN cu.nombre = 'Especialidad' THEN CONCAT_WS('-', 'E', i.idprograma)
-        WHEN cu.nombre = 'Maestría' THEN CONCAT_WS('-', 'M', i.idprograma)
-    END, "-") AS id_portal,
+	i.idprograma AS id_portal,
 	cu.nombre as tipo_programa,
 	ipu.id as id_ins_sxx,
 	IFNULL(i.id, "-") as id_ins_portal,
