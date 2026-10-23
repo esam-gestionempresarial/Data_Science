@@ -33,8 +33,7 @@ SELECT
     COUNT(DISTINCT i.id) AS cant_registros,
     COUNT(DISTINCT CASE WHEN ea.id = 3 OR ea.id = 9 THEN i.id END) AS cant_inscritos,
     IFNULL(ult_mod.numero, 0) AS fase_actual,
-    IFNULL(COUNT(DISTINCT mpu.id), 0) AS cant_modulos,
-    pu.sede_universidad_id 
+    IFNULL(COUNT(DISTINCT mpu.id), 0) AS cant_modulos
 FROM programas p
 LEFT JOIN postgrados p2 ON p.idpostgrado = p2.id
 LEFT JOIN categorias c ON p2.idcategoria = c.id
